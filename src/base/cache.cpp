@@ -35,6 +35,11 @@
 #include "stat.hpp"	// new_cache, del_cache
 
 #include <string>
+#include <mutex>
+#include <atomic>
+
+static std::mutex cache_mutex;	// protects only short cache-file checks, never a download
+static std::atomic<unsigned> staging_seq(0);
 
 
 /** Constructor */
@@ -94,11 +99,15 @@ FILE * Cache::open(const char *url, Http *http)
 
   char *cachepath = new char[PATH_LEN];
   memset(cachepath, 0, PATH_LEN);
-  if (! path(url, cachepath)) return NULL;
+  if (! path(url, cachepath)) {
+    delete[] cachepath;
+    return NULL;
+  }
 
   FILE *fpr = NULL;
   FILE *fpw = NULL;
   char buf[16];
+  std::string staging = std::string(cachepath) + ".part." + std::to_string(getpid()) + "." + std::to_string(staging_seq++);
 
   if (stat(cachepath, &bufstat) == 0) {
     if (bufstat.st_size == 14) {
@@ -110,7 +119,7 @@ FILE * Cache::open(const char *url, Http *http)
   filein = new File();
   if (! (fpr = filein->open(cachepath, "r"))) {
     fileout = new File();	// not in the cache, write it
-    if (! (fpw = fileout->open(cachepath, "w"))) {
+    if (! (fpw = fileout->open(staging.c_str(), "w"))) {
       error("openCache: can't create %s", cachepath);
       delete[] cachepath;
       delete fileout;
@@ -118,37 +127,56 @@ FILE * Cache::open(const char *url, Http *http)
     }
 
     // Writes the file into the cache
-http_reread:
     //
     // Checks if the head of the downloaded file is valid
     //
-    http->readHttp(buf, 14);	// read head to check if correct
-    if (strncmp(buf, "<!DOCTYPE HTML", 14) == 0) {	// hack!!!
+    int received = http->readHttp(buf, 14);	// read head to check if correct
+    if (received < 0 || (received == 14 && strncmp(buf, "<!DOCTYPE HTML", 14) == 0)) {	// hack!!!
       // Httpd-err occured (404)
       fileout->close();
       delete fileout;
-      unlink(cachepath);
+      fileout = NULL;
+      delete filein;
+      filein = NULL;
+      delete[] cachepath;
+      unlink(staging.c_str());
       progression('-');	// '-' as failed
       return NULL;
     }
-    fwrite(buf, 14, 1, fpw);
+    fwrite(buf, 1, received, fpw);
 
     //
     // Reads and writes the remaining
     //
-    while (http->readHttp(buf, 1)) {
+    while ((received = http->readHttp(buf, 1)) > 0) {
       fwrite(buf, 1, 1, fpw);
     }
     fflush(fpw);
     fileout->close();
     delete fileout;
+    int renamed = -1;
+    if (received >= 0) {
+      std::lock_guard<std::mutex> lock(cache_mutex);
+      renamed = rename(staging.c_str(), cachepath);
+    }
+    if (renamed != 0) {
+      unlink(staging.c_str());
+      delete[] cachepath;
+      delete filein;
+      filein = NULL;
+      return NULL;
+    }
 
     //
     // Reopens the file for reading
     //
+    delete filein;
     filein = new File();
     if (! (fpr = filein->open(cachepath, "r"))) {
       error("openCache: can't reopen %s", cachepath);
+      delete filein;
+      filein = NULL;
+      delete[] cachepath;
       return NULL;
     }
 
@@ -157,10 +185,15 @@ http_reread:
     //
     if (stat(cachepath, &bufstat) == 0) {
       if (bufstat.st_size == 14) {
+        // The HTTP stream is already consumed: re-reading would write to a closed file.
         error("openCache: %s is empty after a 404", cachepath);
         unlink(cachepath);
         progression('-');	// '-' as failed
-        goto http_reread;	// re-do read
+        filein->close();
+        delete filein;
+        filein = NULL;
+        delete[] cachepath;
+        return NULL;
       }
       else {
         progression('h');	// 'h' as http
@@ -188,6 +221,7 @@ void Cache::close()
 /** Checks if file is in the cache */
 bool Cache::inCache(const char *url)
 {
+  std::lock_guard<std::mutex> lock(cache_mutex);
   char *cachepath = new char[PATH_LEN];
   *cachepath = 0;
 

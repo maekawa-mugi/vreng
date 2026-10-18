@@ -82,7 +82,13 @@ int Url::parser(char *url, char *host, char *scheme, char *path)
 
   /* then parse host's name */
   if (urltype != URLFILE) {
-    while ((*url != ':') && (*url != '/') && (*url != '\0')) {
+    int hostlen = 0;
+    while ((*url != '/') && (*url != '\0')) {
+      if (++hostlen >= MAXHOSTNAMELEN) {
+        error("host name too long");
+        *host = '\0';
+        return URLBAD;
+      }
       *host++ = *url;
       url++;
     }

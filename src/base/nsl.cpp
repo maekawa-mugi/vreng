@@ -64,7 +64,7 @@ struct hostent * my_gethostbyname(const char *hostname, int af)
 #if HAVE_GETIPNODEBYNAME
   return my_getipnodebyname(hostname, af);
 #else //!HAVE_GETIPNODEBYNAME
-  return gethostbyname(hostname);
+  return my_gethostbyname_r(hostname, af);
 #endif
 //#endif
 }
@@ -76,10 +76,10 @@ struct hostent * my_gethostbyname_r(const char *hostname, int af)
   return my_getipnodebyname(hostname, af);
 #else //!HAVE_GETIPNODEBYNAME
 #if HAVE_GETHOSTBYNAME_R
-  static struct hostent *hp;
-  struct hostent ret;
+  thread_local struct hostent *hp;
+  thread_local struct hostent ret;
   int err;
-  char buf[512];
+  thread_local char buf[8192];
 
   if (gethostbyname_r(hostname, &ret, buf, sizeof(buf), &hp, &err) == 0)
     return hp;
@@ -94,18 +94,22 @@ struct hostent * my_gethostbyname_r(const char *hostname, int af)
 /** my_getipnodebyname */
 struct hostent * my_getipnodebyname(const char *hostname, int af)
 {
+#if HAVE_GETIPNODEBYNAME
   int err;
-
   return getipnodebyname(hostname, af, AI_DEFAULT, &err);
+#else
+  return gethostbyname(hostname);
+#endif
 }
 
 /** my_free_hostent */
 void my_free_hostent(struct hostent *_hp)
 {
-#if HAVE_FREEHOSTENT
-  //dax if (_hp) freehostent(_hp);
+#if HAVE_GETIPNODEBYNAME && HAVE_FREEHOSTENT
+  if (_hp) freehostent(_hp);
 #else
-  free(_hp);
+  // gethostbyname returns libc-owned storage.
+  (void) _hp;
 #endif
 }
 
@@ -113,7 +117,7 @@ void my_free_hostent(struct hostent *_hp)
 const char * my_inet_ntop(int af, const void *addr)
 {
 #if HAVE_INET_NTOP
-  char dst[MAXHOSTNAMELEN];
+  thread_local char dst[MAXHOSTNAMELEN];
 
   return inet_ntop(af, addr, dst, sizeof(dst));
 #else

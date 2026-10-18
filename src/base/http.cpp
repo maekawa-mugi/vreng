@@ -23,6 +23,8 @@
 //
 // Http I/Os operations
 //---------------------------------------------------------------------------
+#include <string>
+
 #include "vreng.hpp"
 #include "http.hpp"
 #include "texture.hpp"	// Texture
@@ -203,6 +205,26 @@ int Http::httpOpen(const char *url,
   return 0;
 }
 
+/** Splits "host[:port]": cuts host, fills the Host: header value and the network-order port */
+static bool splitHostPort(char *host, char *hosthdr, uint16_t& port)
+{
+  uint16_t p = DEF_HTTP_PORT;
+
+  snprintf(hosthdr, MAXHOSTNAMELEN, "%s", host);
+  if (char *portstr = strchr(host, ':')) {
+    char *end;
+    long value = strtol(portstr + 1, &end, 10);
+    if (portstr[1] == '\0' || *end || value < 1 || value > 65535) {
+      error("invalid HTTP port: %s", portstr);
+      return false;
+    }
+    p = static_cast<uint16_t>(value);
+    *portstr = '\0';
+  }
+  port = htons(p);
+  return true;
+}
+
 /** Makes a http connection */
 void * Http::connection(void *_http)
 {
@@ -222,6 +244,7 @@ void * Http::connection(void *_http)
   char *scheme = new char[8];
   char *path = new char[PATH_LEN];
   char *req = new char[512];
+  char hosthdr[MAXHOSTNAMELEN];	// Host: header value (host[:port])
 
   int urltype = Url::parser(http->url, host, scheme, path);
   //echo("HTTP: %s://%s/%s", scheme, host, path);
@@ -240,6 +263,7 @@ void * Http::connection(void *_http)
     break;
 
   case Url::URLHTTP:	// http://
+    if (! splitHostPort(host, hosthdr, port)) break;
 httpretry:
     if (proxy && (!noproxy || strstr(host, domnoproxy) == 0)) {  // proxy
       if (! (hp = my_gethostbyname(hostproxy, AF_INET))) {
@@ -258,12 +282,7 @@ httpretry:
       if (! (hp = my_gethostbyname(host, AF_INET))) {
         err = -BADNAME;	// not resolved
       }
-      if (! strcmp(scheme, "http")) {
-        port = htons(DEF_HTTP_PORT);
-      }
-      else {
-        err = -BADSERV;
-      }
+      if (strcmp(scheme, "http")) err = -BADSERV;
       if (err < 0 && ! strcmp(host, "localhost")) {	// force localhost (not resolved)
         httpsa.sin_family = AF_INET;
         struct in_addr myip;
@@ -271,7 +290,7 @@ httpretry:
         httpsa.sin_addr = myip;
         err = 0;
       }
-      else {
+      else if (hp) {
         httpsa.sin_family = hp->h_addrtype;
         memcpy(&httpsa.sin_addr, hp->h_addr_list[0], hp->h_length);
       }
@@ -280,6 +299,7 @@ httpretry:
       if (err < 0) {
         error("can't resolve %s", host);
         httperr = true;
+        break;
       }
 
       // Opens a socket to connect
@@ -299,17 +319,17 @@ httpretry:
         if (proxy && (!noproxy || strstr(host, domnoproxy) == 0)) {
           sprintf(req,
                   "GET %s?version=%s&target=%s-%s%s&user=%s HTTP/1.1\r\nHost: %s\r\n\r\n",
-                  http->url, PACKAGE_VERSION, ::g.env.machname(), ::g.env.sysname(), ::g.env.relname(), ::g.user, host);
+                  http->url, PACKAGE_VERSION, ::g.env.machname(), ::g.env.sysname(), ::g.env.relname(), ::g.user, hosthdr);
         }
         else {
           sprintf(req,
                   "GET %s?version=%s&target=%s-%s%s&user=%s HTTP/1.1\r\nHost: %s\r\n\r\n",
                   path, PACKAGE_VERSION, ::g.env.machname(), ::g.env.sysname(), 
-                  ::g.env.relname(), ::g.user, host);
+                  ::g.env.relname(), ::g.user, hosthdr);
         } 
       } 
       else {		// GET classic
-        sprintf(req, "GET %s HTTP/1.1\r\nHost: %s\r\n\r\n", path, host);
+        sprintf(req, "GET %s HTTP/1.1\r\nHost: %s\r\n\r\n", path, hosthdr);
       } 
       //echo("reqGet: %s", req);
 
@@ -375,7 +395,9 @@ httpretry:
                   if ( (p = strstr(httpheader, "Location:")) != 0 ) {
                     if ( (q = strchr(p+17, '/')) != 0 ) {
                       *q = '\0';
+                      if (strlen(p+17) >= MAXHOSTNAMELEN) break;
                       strcpy(host, p+17);	// redirect host
+                      if (! splitHostPort(host, hosthdr, port)) break;
                       goto httpretry;
                     }
                   }
@@ -493,10 +515,6 @@ int Http::httpRead(char *pbuf, int maxl)
 // Http IOs methods
 //
 
-static char    http_buf[BUFSIZ];
-static int32_t http_pos = 0;
-static int32_t http_len = 0;
-static bool    http_eof = false;
 
 /** Resets http */
 void Http::reset()
@@ -530,17 +548,17 @@ int Http::readHttp(char *buf, int maxlen)
   int32_t siz = http_len - http_pos;
 
   if (siz >= maxlen) {
-    memcpy(buf, http_buf, maxlen);
+    memcpy(buf, http_buf + http_pos, maxlen);
     http_pos += maxlen;
     return maxlen;
   }
   else {
-    memcpy(buf, http_buf, siz);
+    memcpy(buf, http_buf + http_pos, siz);
     http_pos = http_len;
     int r = httpRead(buf+siz, maxlen-siz);
-    if (r == 0) {
+    if (r <= 0) {
       http_eof = true;
-      return 0;	// http eof
+      return siz ? siz : r;
     }
     uint32_t size = siz + r;
     return size;
@@ -581,28 +599,22 @@ void Http::checkProxy()
     p = getenv(HTTP_PROXY);  // syntax: http://hostname:port/
   }
   if (p && *p) {
-    char envproxy[90];
+    std::string e(p);		// do not modify the environment string
 
-    hostproxy = new char[strlen(p)];
-    if (p[strlen(p) - 1] == '/') {
-      p[strlen(p) - 1] = '\0';
-    }
-    strcpy(envproxy, p);
-    p = strrchr(envproxy, ':');
-    *p = '\0';
-    portproxy = atoi(++p);
-    if (! (p = strrchr(envproxy, '/'))) {
-      sprintf(hostproxy, "http://%s", envproxy);
-    }
-    else {
-      strcpy(hostproxy, ++p);
-    }
+    if (e.back() == '/') e.pop_back();
+    size_t start = e.find("://");
+    start = (start == std::string::npos) ? 0 : start + 3;
+    size_t colon = e.find(':', start);
+    portproxy = (colon == std::string::npos) ? DEF_HTTP_PORT : atoi(e.c_str() + colon + 1);
+    std::string h = e.substr(start, (colon == std::string::npos) ? std::string::npos : colon - start);
+    hostproxy = new char[h.size() + 1];
+    strcpy(hostproxy, h.c_str());
     proxy = 1;
     trace1(DBG_HTTP, "proxy=%s:%d", hostproxy, portproxy);
   }
   p = (::g.pref.noproxystr) ? ::g.pref.noproxystr : getenv(NO_PROXY);
   if (p && *p) {
-    domnoproxy = new char[strlen(p)];
+    domnoproxy = new char[strlen(p) + 1];
     strcpy(domnoproxy, p);
     noproxy = 1;
   }

@@ -67,6 +67,12 @@ class Http {
   void *handle;		///< thread handle
   bool thread;		///< thread (>0) or not (<=0)
 
+  // Each connection owns its buffered reader; downloads run concurrently.
+  char http_buf[BUFSIZ];
+  int32_t http_pos;
+  int32_t http_len;
+  bool http_eof;
+
   // methods
   void begin_thread();	///< begins a thread
   void end_thread();	///< ends a thread
