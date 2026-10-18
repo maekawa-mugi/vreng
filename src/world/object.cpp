@@ -1025,7 +1025,7 @@ char * Object::tokenize(char *l)
   char *p = strstr(l, "<solid");
   if (p) {
     char *q, *s;
-    geom = new char[strlen(l)];
+    geom = new char[strlen(l) + 1];
     strcpy(geom, ++p);
     for (s = geom; (q = strstr(s, "/>")) ; ) {
       s = q;			// end of geom found

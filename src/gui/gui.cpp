@@ -407,6 +407,7 @@ void Gui::collapseAvatar()
 //
 void Gui::clearInfoBar()
 {
+  selected_object = NULL;
   widgets->navig.clearInfoBar();
 }
 

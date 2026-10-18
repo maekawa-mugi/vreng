@@ -507,7 +507,7 @@ void Pref::parse(int argc, char **argv)
   /////////
   // urlpfx
   //
-  char *pfx = new char[URL_LEN];
+  char *pfx = new char[URL_LEN]();
 
   if (strncmp(DEF_URL_PFX, "~%s", 3) == 0) {
     strcat(pfx, "~");			// ~/public_html/ or ~/Sites/
@@ -553,7 +553,7 @@ void Pref::parse(int argc, char **argv)
     p2 = ++p1;
     p1 = strchr(p1, '/');
     *p1 = '\0';
-    strcpy(server, p2); 
+    memmove(server, p2, strlen(p2) + 1);
   }
   ::g.server = strdup(server);
   //echo("url: %s", ::g.url);

@@ -83,7 +83,7 @@ void Ball::geometry()
 
   sprintf(s, "geom shape=\"sphere\" r=\"%f\" tx=\"%s\" />", RADIUS, DEF_URL_BALL);
   if (! geom) {
-    geom = new char[strlen(s)];
+    geom = new char[strlen(s) + 1];
     strcpy(geom, s);
   }
   parseSolid(s);

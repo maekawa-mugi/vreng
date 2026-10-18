@@ -200,7 +200,7 @@ Step::Step(Pos& npos, Pos& _ipos, const char *typname, const char *_geom, bool _
   pos.y = npos.y;
   pos.z = npos.z;
 
-  char *s = new char[strlen(_geom)];
+  char *s = new char[strlen(_geom) + 1];
   strcpy(s, _geom);
   parseSolid(s);
   delete[] s;

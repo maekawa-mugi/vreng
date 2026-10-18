@@ -40,9 +40,10 @@ Env::Env()
   setlocale(LC_ALL, "C");       // Unix traditionnal
 #endif
   
-  systemname = new char[16];
-  releasename = new char[16];
-  machinename = new char[32];
+  vrengdir = NULL;
+  systemname = new char[PATH_LEN]();
+  releasename = new char[PATH_LEN]();
+  machinename = new char[PATH_LEN]();
   pathhtdocs = new char[PATH_LEN];
   strcpy(systemname, "unknown");
   strcpy(releasename, "unknown");
@@ -54,7 +55,7 @@ Env::Env()
   strcpy(systemname, myutsname.sysname);
   strcpy(releasename, myutsname.release);
   strcpy(machinename, myutsname.machine);
-  for (int i=0; i < 32; i++) {
+  for (size_t i=0; machinename[i]; i++) {
     if (machinename[i] == ' ') {
       machinename[i] = '_';
     }
@@ -71,6 +72,9 @@ Env::~Env()
   if (vrengdir) delete[] vrengdir;
   if (vrengcwd) delete[] vrengcwd;
   if (pathhtdocs) delete[] pathhtdocs;
+  delete[] systemname;
+  delete[] releasename;
+  delete[] machinename;
 }
 
 const char * Env::home() const
@@ -165,7 +169,7 @@ void Env::init()
 
   // $LOGNAME
   logname = new char[USER_LEN];
-  logname = getenv("LOGNAME");
+  snprintf(logname, USER_LEN, "%s", getenv("LOGNAME") ? getenv("LOGNAME") : "nobody");
 
   // dir $CWD
   vrengcwd = new char[PATH_LEN];
@@ -173,7 +177,7 @@ void Env::init()
 
   // dir $HOME
   homedir = new char[PATH_LEN];
-  homedir = getenv("HOME");
+  snprintf(homedir, PATH_LEN, "%s", getenv("HOME") ? getenv("HOME") : ".");
 
   // dir $WEB (public_html/ | Sites/)
   if (! strcmp(DEF_HTTP_SERVER, "localhost") && strlen(DEF_URL_PFX) > 0) { // if local server
@@ -204,7 +208,11 @@ void Env::init()
 
   // dir $HOME/.vreng/
   pathenv = new char[PATH_LEN];
-  sprintf(pathenv, "%s/.vreng", homedir);
+  const char *state_dir = getenv("VRENG_HOME");
+  if (state_dir && *state_dir)
+    snprintf(pathenv, PATH_LEN, "%s", state_dir);
+  else
+    snprintf(pathenv, PATH_LEN, "%s/.vreng", homedir);
   if (stat(pathenv, &bufstat) < 0) {
     mkdir(pathenv, 0700);
   }

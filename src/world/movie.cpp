@@ -94,7 +94,7 @@ Movie::Movie(char *l)
   file = NULL;
   spot = NULL;
 
-  line = new char[strlen(l)];
+  line = new char[strlen(l) + 1];
   strcpy(line, l);
   parser(l);		// display texture url
 

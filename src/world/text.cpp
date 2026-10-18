@@ -95,7 +95,7 @@ bool Text::loadFont()
     return false;
   }
   // build the font texture
-  txf->buildTexture(0, GL_TRUE);	// mipmaps true
+  if (!txf->buildTexture(0, GL_TRUE)) return false;	// mipmaps true
   havefont = true;
   return havefont;
 }

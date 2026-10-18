@@ -29,6 +29,7 @@
 #define GUI_HPP
 
 #include <vector>
+#include <cstdint>
 
 #include "ubit/ustr.hpp"	// UStr
 

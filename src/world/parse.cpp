@@ -298,7 +298,7 @@ int Parse::parseVreFile(char *buf, int buflen)
     for (iol = bol; iol < len; iol++) {
       if (workline[iol] == '\n') {
         numline++;
-        if (workline[iol-1] == '\\') {	// end of physical line, line follows
+        if (iol > bol && workline[iol-1] == '\\') {	// end of physical line, line follows
           workline[iol-1] = workline[iol] = ' ';
         }
         else {			// end of logical line
@@ -314,7 +314,7 @@ int Parse::parseVreFile(char *buf, int buflen)
       // build line from workline
       memcpy(line, workline + bol, eol - bol);
       line[eol - bol] = '\0';
-      if (line[eol - bol - 1] == '\r') line[eol - bol - 1] = '\0';	// WIN32
+      if (eol > bol && line[eol - bol - 1] == '\r') line[eol - bol - 1] = '\0';	// WIN32
       //trace1(DBG_FORCE, "line %d: %s %d %d", numline, line, eol, bol);
 
       // discard empty lines

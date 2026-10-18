@@ -141,9 +141,9 @@ void World::setName(const char *urlOrName)
   if (! end) end = begin + strlen(begin);
 
   // Copy the name
-  if (name) delete name;
+  if (name) delete[] name;
   uint8_t len = MIN(WORLD_LEN, end-begin);
-  name = new char[len];
+  name = new char[len + 1];
   memcpy(name, begin, len);
   name[len] = '\0';
 }
@@ -501,6 +501,7 @@ void World::init(const char *url)
 /** Quits the current World */
 void World::quit()
 {
+  ::g.gui.clearInfoBar();
   //trace1(DBG_WO, "quit %s", name);
   state = STOPPED;
 
@@ -769,15 +770,17 @@ void World::checkIcons()
 /** Checks whether other objects are persistents */
 void World::checkPersist()
 {
+  if (::g.pref.nopersist || !persistent) return;
   VSql *vsql = new VSql();     // first take the VSql handle;
   if (vsql) {
     int nitem = 0;
-    char pat[64], name[128];
+    char pat[64], name[128] = {0};
+    const char *worldname = this->name ? this->name : "";
 
     // check balls
-    nitem = vsql->getCount(BALL_NAME, name);	// balls in VSql
+    nitem = vsql->getCount(BALL_NAME, worldname);	// balls in VSql
     for (int i=0; i < nitem; i++) {
-      sprintf(pat, "@%s", name);
+      snprintf(pat, sizeof(pat), "@%s", worldname);
       if (vsql->getName(BALL_NAME, pat, i, name) >= 0) {
         char *p = strchr(name, '@');
         if (p) {
@@ -787,9 +790,9 @@ void World::checkPersist()
       }
     }
     // check things
-    nitem = vsql->getCount(THING_NAME, name);	// things in VSql
+    nitem = vsql->getCount(THING_NAME, worldname);	// things in VSql
     for (int i=0; i < nitem; i++) {
-      sprintf(pat, "@%s", name);
+      snprintf(pat, sizeof(pat), "@%s", worldname);
       if (vsql->getName(THING_NAME, pat, i, name) >= 0) {
         char *p = strchr(name, '@');
         if (p) {
@@ -799,9 +802,9 @@ void World::checkPersist()
       }
     }
     // check mirages
-    nitem = vsql->getCount(MIRAGE_NAME, name);	// mirages in VSql
+    nitem = vsql->getCount(MIRAGE_NAME, worldname);	// mirages in VSql
     for (int i=0; i < nitem; i++) {
-      sprintf(pat, "@%s", name);
+      snprintf(pat, sizeof(pat), "@%s", worldname);
       if (vsql->getName(MIRAGE_NAME, pat, i, name) >= 0) {
         char *p = strchr(name, '@');
         if (p) {

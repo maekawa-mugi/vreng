@@ -37,7 +37,7 @@
 static const char *lastTxfErr;
 
 
-Txf::Txf(const char *_url)
+Txf::Txf(const char *_url) : texfont(NULL)
 {
   strcpy(url, _url);
 }
@@ -73,7 +73,7 @@ void Txf::reader(void *_txf, Http *http)
     return;
   }
 
-  txf->texfont = new struct TexFont[1];
+  txf->texfont = new struct TexFont[1]();
   txf->texfont->tgi = NULL;
   txf->texfont->tgvi = NULL;
   txf->texfont->lut = NULL;
@@ -168,7 +168,7 @@ void Txf::reader(void *_txf, Http *http)
   txf->texfont->min_glyph = min_glyph;
   txf->texfont->range = max_glyph - min_glyph + 1;
 
-  txf->texfont->lut = new TexGlyphVertexInfo*[txf->texfont->range];
+  txf->texfont->lut = new TexGlyphVertexInfo*[txf->texfont->range]();
   if (! txf->texfont->lut) {
     lastTxfErr = "out of memory.";
     goto err;
@@ -199,7 +199,7 @@ void Txf::reader(void *_txf, Http *http)
     }
     got = fread(reinterpret_cast<char *> (texbitmap), 1, stride * height, f);
     EXPECT(stride * height);
-    if (! (txf->texfont->teximage = new uint8_t[width * height])) {
+    if (! (txf->texfont->teximage = new uint8_t[width * height]())) {
       lastTxfErr = "out of memory.";
       goto err;
     }
@@ -235,6 +235,7 @@ err:
 TexGlyphVertexInfo * Txf::getGlyph(int c)
 {
   TexGlyphVertexInfo *tgvi;
+  if (!texfont) return NULL;
 
   // Automatically substitute uppercase letters with lowercase if not
   // uppercase available (and vice versa).
@@ -253,6 +254,9 @@ lastchance:
         return texfont->lut[c - texfont->min_glyph];
     }
   }
+  // A missing space must terminate substitution instead of looping forever.
+  if (c == ' ') return NULL;
+
   error("texfont: unavailable font character \"%c\" (%d)", isprint(c) ? c : ' ', c);
   c = ' ';
   goto lastchance;
@@ -289,6 +293,7 @@ GLuint Txf::buildTexture(GLuint texobj, GLboolean setupMipmaps)
 
 void Txf::bindTexture()
 {
+  if (!texfont) return;
   glBindTexture(GL_TEXTURE_2D, texfont->texobj);
 }
 
