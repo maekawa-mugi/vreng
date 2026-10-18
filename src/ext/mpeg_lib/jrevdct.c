@@ -157,7 +157,6 @@ static DCTELEM PreIDCT[64][64];
 void
 init_pre_idct() {
   int i;
-  void mpeg_j_rev_dct();
 
   for (i=0; i<64; i++) {
     memset((char *) PreIDCT[i], 0, 64*sizeof(DCTELEM));

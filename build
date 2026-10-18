@@ -1,52 +1,8 @@
-#! /bin/sh
-#
-# build [args...]
-#
-# args are the same of ./configure [args...]
-#
-# - installs all requirements
-# - launches needed servers
-# - configures vreng
-# - compiles vreng
-#
-# Philippe Dax - 2024
-#
-PATH=conf:$PATH export PATH
-
-topdir=$(pwd)
-p=$(basename $0)
-
-if [ ! -d log ]; then
-  mkdir log >/dev/null 2>&1
-fi
-log=log/$p.log
-cp /dev/null $log
-echo "$p start: $(date)" >>$log
-
-# goto conf dir
-cd conf
-
-# suggests or installs requirements
-./prerequis.sh
-
-# launches X11 server
-./x11.sh
-
-# configures and launches local httpd server
-./httpd.sh
-
-# sets cache if it exists
-./cache.sh
-
-# configures vreng
-./autogen.sh "$@"
-
-# comes bak to topdir
-cd $topdir
-
-# compiles vreng sources
-make
-
-echo "$p stop:  $(date)" >>$log
-
-cat $log
+#!/bin/sh
+# Bootstrap, configure and build. Runtime services belong in the launcher.
+set -eu
+cd -- "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+mkdir -p log
+./conf/prerequis.sh
+./conf/autogen.sh "$@"
+make -j"${JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 2)}"

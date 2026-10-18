@@ -86,7 +86,7 @@ AC_SEARCH_LIBS([strerror],[cposix])
 # Where to install by default, handle the --prefix=... option
 #
 if test "${prefix}" = "NONE"; then
-  prefix=/usr/localn
+  prefix=/usr/local
 fi
 if test "${exec_prefix}" = "NONE"; then
   exec_prefix=${prefix}
@@ -99,7 +99,7 @@ fi
 #
 CFLAGS="${CFLAGS}"
 CXXFLAGS="${CXXFLAGS}"
-CPPFLAGS="${CXXFLAGS}"
+CPPFLAGS="${CPPFLAGS}"
 LDFLAGS="${LDFLAGS}"
 
 if test "${GCC}" = "yes"; then
@@ -399,6 +399,19 @@ if test x$TTFPATH != x; then
 fi
 AC_SUBST(X_CFLAGS)
 AC_SUBST(X_LIBS)
+
+# GNU ld needs to rescan mutually dependent static archives.
+ARCHIVE_GROUP_START=
+ARCHIVE_GROUP_END=
+case "$host_os" in
+  linux*)
+    ARCHIVE_GROUP_START=-Wl,--start-group
+    ARCHIVE_GROUP_END=-Wl,--end-group
+    ;;
+esac
+AC_SUBST(ARCHIVE_GROUP_START)
+AC_SUBST(ARCHIVE_GROUP_END)
+
 
 
 # --------------------------------------------------------------------------
@@ -756,7 +769,7 @@ fi
 AC_X11_CHECK
 
 saved_ldflags=$LDFLAGS
-LDFLAGS="$X_LDFLAGS $X_LIBS"
+LDFLAGS="$LDFLAGS $X_LDFLAGS $X_LIBS"
 
 
 # --------------------------------------------------------------------------
@@ -806,17 +819,17 @@ fi
 # check jpeg library
 #
 AH_TEMPLATE(HAVE_LIBJPEG)
-AC_CHECK_LIB([jpeg], [jpeg_read_scanlines],
-             [LIBS="-ljpeg $LIBS"],
-             [AC_MSG_WARN([jpeg library not found, check config.log!, or try apt|dnf|yum|brew install libjpeg-turbo-devel | apt-get install libjpeg8-dev])],
-             [-L/usr/local/lib])
-if test "$ac_cv_lib_jpeg_jpeg_read_scanlines" = "yes"; then
-  AC_DEFINE([HAVE_LIBJPEG])
-  ubit_features="$ubit_features UBIT_WITH_JPEG"
-fi
-AH_TEMPLATE(HAVE_JPEGLIB_H)
-AC_CHECK_HEADER([jpeglib.h], [AC_DEFINE([HAVE_JPEGLIB_H])],
-	        AC_MSG_WARN([unable to find jpeg header]))
+PKG_PROG_PKG_CONFIG
+PKG_CHECK_MODULES([JPEG], [libjpeg])
+CPPFLAGS="$JPEG_CFLAGS $CPPFLAGS"
+LIBS="$JPEG_LIBS $LIBS"
+# Keep the library directory ahead of system GL paths when multiple JPEG ABIs
+# are installed. Headers and the linked library must come from the same prefix.
+JPEG_LDFLAGS=`$PKG_CONFIG --libs-only-L libjpeg`
+LDFLAGS="$LDFLAGS $JPEG_LDFLAGS"
+AC_DEFINE(HAVE_LIBJPEG)
+AC_CHECK_HEADERS([jpeglib.h])
+ubit_features="$ubit_features UBIT_WITH_JPEG"
 
 
 # --------------------------------------------------------------------------
@@ -901,27 +914,13 @@ fi
 #
 # searches for freetype2 library
 #
-have_freetype="no"
-have_freetype_and_gl="no"
-AH_TEMPLATE(WITH_FREETYPE)
-AC_CHECK_LIB([freetype],[FT_Library_Version],[have_freetype="yes"
-             [LIBS="-lfreetype $LIBS"]],
-             [AC_MSG_WARN([could not find FreeType2!, try apt|dnf|yum|brew install freetype-devel or apt-get install libfreetype6-dev])])
-AC_PATH_PROG(FREETYPE_CONFIG,freetype-config)
-freetype_cflags=`$FREETYPE_CONFIG --cflags`
-FREETYPE_CFLAGS=$freetype_cflags
-AC_SUBST(FREETYPE_CFLAGS)
-freetype_libs=`$FREETYPE_CONFIG --libs`
-CPPFLAGS="$freetype_cflags $CPPFLAGS"
-LDFLAGS="$LDFLAGS $freetype_libs"
-if test "$have_freetype" = "yes"; then
-  ubit_features="$ubit_features UBIT_WITH_FREETYPE"
-  if test "$have_gl" = "yes"; then
-    have_freetype_and_gl="yes";
-  fi
-fi
-AM_CONDITIONAL(WITH_FREETYPE, test "$have_freetype" = "yes")
-AM_CONDITIONAL(WITH_FTGL, test "$have_freetype_and_gl" = "yes")
+PKG_PROG_PKG_CONFIG
+PKG_CHECK_MODULES([FREETYPE], [freetype2])
+CPPFLAGS="$FREETYPE_CFLAGS $CPPFLAGS"
+LIBS="$FREETYPE_LIBS $LIBS"
+ubit_features="$ubit_features UBIT_WITH_FREETYPE"
+AM_CONDITIONAL(WITH_FREETYPE, true)
+AM_CONDITIONAL(WITH_FTGL, true)
 
 
 # --------------------------------------------------------------------------
@@ -931,7 +930,7 @@ AM_CONDITIONAL(WITH_FTGL, test "$have_freetype_and_gl" = "yes")
 AC_ARG_WITH([ubit-builtin],
     AS_HELP_STRING([--with-ubit-builtin],[use builtin UBIT toolkit [[default=yes]]]),
     [ac_cv_use_ubit_builtin=$withval], [ac_cv_use_ubit_builtin=yes])
-LDFLAGS="$X_LDFLAGS $X_LIBS -lpthread"
+# Preserve caller and dependency linker flags.
 
 # Use builtin ubit
 UBIT_L="-L../../src/ubit"
@@ -945,7 +944,7 @@ toolkit=7.0.0
 XLIBS=$x_libs
 AC_SUBST(XLIBS)
 AC_SUBST(UBIT_CFLAGS)
-LDFLAGS=$saved_ldflags
+# LDFLAGS is unchanged by the builtin Ubit configuration.
 
 
 # --------------------------------------------------------------------------
@@ -1001,7 +1000,7 @@ fi
 saved_cppflags=$CPPFLAGS
 saved_ldflags=$LDFLAGS
 CPPFLAGS="$GL_I $X_CFLAGS"
-LDFLAGS="$X_LDFLAGS $X_LIBS $GL_L"
+LDFLAGS="$LDFLAGS $X_LDFLAGS $X_LIBS $GL_L"
 
 # check that the libs are here
 if test "$LDFLAGS_EXT" = "" ; then
@@ -1570,16 +1569,6 @@ _EOFUBIT
 	ubit_version_minor=0
 	ubit_version_micro=0
 	])
-
-# clean unused scripts in conf/
-echo "cleaning up $ac_aux_dir directory"
-mkdir $ac_aux_dir/aux 1>/dev/null 2>&1
-mv $ac_aux_dir/compile $ac_aux_dir/aux
-mv $ac_aux_dir/depcomp $ac_aux_dir/aux
-mv $ac_aux_dir/config.guess $ac_aux_dir/aux
-mv $ac_aux_dir/config.sub $ac_aux_dir/aux
-mv $ac_aux_dir/install-sh $ac_aux_dir/aux
-mv $ac_aux_dir/missing $ac_aux_dir/aux
 
 # config.status
 AC_OUTPUT

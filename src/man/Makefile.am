@@ -13,8 +13,6 @@ SUFFIXES: .man .1 .8
 .8.man:
 	@man ./$<.8 >$(MAN)/$<.man
 
-all: man
-
 man:
 	@-rm -rf $(MAN)
 	@-mkdir $(MAN) >/dev/null 2>&1
