@@ -425,37 +425,28 @@ UEventFlow* UDisp::obtainFlow(unsigned int estate, int channel) {
 }
 
 void UDisp::onResize(UView* winview, const UDimension& size) {
-  // ce test est pas bon car winview peut avoir ete change sans que onResize()
-  // ait ete mis a jour (c'est le cas avec GLUT par exple)
-  //if (winview->getWidth() != size.width || winview->getHeight() != size.height) {
-    
-    // different winview: purge requests on previous winview
-    if (last_resize.winview != null && last_resize.winview != winview) {
-      last_resize.count = 1;  // do it now
-      onResizeCB(last_resize.winview);
-      last_resize.winview = null;
-      last_resize.count = 0;
-    }
-    
-    last_resize.count++;
-    last_resize.winview = winview;
-    last_resize.newsize = size;
-    UAppli::postpone(ucall(this, winview, &UDisp::onResizeCB));
-  //}
+  // Finish the previous window before coalescing events for a different one.
+  if (last_resize.winview && last_resize.winview != winview) {
+    last_resize.count = 1;
+    onResizeCB(last_resize.winview);
+  }
+  last_resize.count++;
+  last_resize.winview = winview;
+  last_resize.newsize = size;
+  UAppli::postpone(ucall(this, winview, &UDisp::onResizeCB));
 }
 
 void UDisp::onResizeCB(UView* winview) {
-  if (last_resize.winview == winview && last_resize.count == 1) {
-    last_resize.winview = null;
-    UDimension& size = last_resize.newsize;
-    
-    UWin* win = winview->getWin();
-    UHardwinImpl* hw = win->getHardwin(this);
-    //cerr << "onResizeCB " << win->hardImpl() << " "<< hw << endl;
-    hw->doUpdateImpl(UUpdate::LAYOUT, win, winview, &size);
-    win->repaint();
-  }
-  last_resize.count--;
+  // Timers queued for a previously resized window may still fire. They must
+  // not decrement the active window's counter (or make it negative).
+  if (last_resize.winview != winview || last_resize.count <= 0) return;
+  if (--last_resize.count > 0) return;
+  last_resize.winview = null;
+  UDimension size = last_resize.newsize;
+  UWin* win = winview->getWin();
+  UHardwinImpl* hw = win->getHardwin(this);
+  hw->doUpdateImpl(UUpdate::LAYOUT, win, winview, &size);
+  win->repaint();
 }
 
 void UDisp::onPaint(UView* winview, float x, float y, float w, float h) {

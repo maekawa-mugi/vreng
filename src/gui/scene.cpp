@@ -116,11 +116,24 @@ void Scene::setScene(GLint x, GLint y, GLsizei w, GLsizei h)
  */
 GLSection::GLSection(Scene* s) :
  UGraph::Glpaint(s->getView(), true)
-{}
+{
+  GLint viewport[4];
+  glGetIntegerv(GL_VIEWPORT, viewport);
+  glScissor(viewport[0], viewport[1], viewport[2], viewport[3]);
+  glEnable(GL_SCISSOR_TEST);
+}
 
 /** Paints the scene CB */
 void Scene::paintCB(UPaintEvent& e)
 {
+  // Menu teardown during a world change may synchronously request repaint.
+  static bool painting = false;
+  if (painting) return;
+  struct PaintGuard {
+    bool& active;
+    PaintGuard(bool& value) : active(value) { active = true; }
+    ~PaintGuard() { active = false; }
+  } guard(painting);
   GLSection gls(this);
 
   if (initialized) {
@@ -224,7 +237,7 @@ void Scene::resize(UResizeEvent& e, int width, int height)
 /** Refresh the hud corner */
 void Scene::refreshHud()
 {
-  char row[32];
+  char row[256];
   
   // rate
   sprintf(row, "rate:   %.1f fps", ::g.timer.rate());

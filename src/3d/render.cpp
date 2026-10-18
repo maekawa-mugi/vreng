@@ -297,11 +297,13 @@ void Render::renderTransparent(bool mini)
   }
 }
 
-/** Renders ground solids sorted from the furthest to the nearest */
+/** Renders opaque ground solids in stable scene order. */
 void Render::renderGround()
 {
   trace2(DBG_3D, "\nground: ");
-  groundList.sort(compDist);		// sort distances decreasingly
+  // Coplanar ground patches can use different texture scales (Rendezvous).
+  // Sorting them by eye distance changes which patch wins the depth test while
+  // walking, making the floor pattern jump. Keep the source order instead.
   for (std::list<Solid*>::iterator it = groundList.begin(); it != groundList.end() ; ++it) {
     materials();
     recordObject((*it)->object);	// records the name before displaying it
@@ -560,7 +562,7 @@ uint16_t Render::bufferSelection(GLint x, GLint y, GLint depth)
 
   // set selection mode
   memset(selbuf, 0, sizeof(selbuf));
-  glSelectBuffer(sizeof(selbuf), selbuf);
+  glSelectBuffer(sizeof(selbuf) / sizeof(selbuf[0]), selbuf);
   glRenderMode(GL_SELECT);
   glInitNames();
   glPushName(0);
@@ -575,6 +577,10 @@ uint16_t Render::bufferSelection(GLint x, GLint y, GLint depth)
   GLfloat right = top * ratio;
   GLfloat left = -right;
 
+  GLint previous_matrix_mode;
+  glGetIntegerv(GL_MATRIX_MODE, &previous_matrix_mode);
+  glMatrixMode(GL_MODELVIEW);
+  glPushMatrix();
   glMatrixMode(GL_PROJECTION);
   glPushMatrix();
   glLoadIdentity();
@@ -590,12 +596,16 @@ uint16_t Render::bufferSelection(GLint x, GLint y, GLint depth)
   // redraw the objects into the selection buffer
   renderSolids(1);	// mini render
 
-  // we put the normal mode back
+  // Balance both stacks: the selection frustum belongs to GL_PROJECTION.
   glMatrixMode(GL_MODELVIEW);
   glPopMatrix();
+  glMatrixMode(GL_PROJECTION);
+  glPopMatrix();
+  glMatrixMode(previous_matrix_mode);
 
-  // scan the selection buffer, find the nearest hit
+  // A negative hit count means selection-buffer overflow.
   GLint hits = glRenderMode(GL_RENDER);
+  if (hits <= 0) return 0;
   GLuint** hitlist = new GLuint*[hits];
   GLuint *psel = selbuf;
 
@@ -776,7 +786,7 @@ Object** Render::getVisibleObjects(char **listtype, int nbr, int *nbelems)
 Object** Render::getDrawedObjects(int *nbhit)
 {
   // set selection mode
-  glSelectBuffer(sizeof(selbuf), selbuf);
+  glSelectBuffer(sizeof(selbuf) / sizeof(selbuf[0]), selbuf);
   glRenderMode(GL_SELECT);
   glInitNames();
   glPushName(0);
@@ -791,6 +801,10 @@ Object** Render::getDrawedObjects(int *nbhit)
   GLfloat right = top * ratio;
   GLfloat left = -right;
 
+  GLint previous_matrix_mode;
+  glGetIntegerv(GL_MATRIX_MODE, &previous_matrix_mode);
+  glMatrixMode(GL_MODELVIEW);
+  glPushMatrix();
   glMatrixMode(GL_PROJECTION);
   glPushMatrix();
   glLoadIdentity();
@@ -807,9 +821,12 @@ Object** Render::getDrawedObjects(int *nbhit)
   // redraws the objects into the selection buffer
   renderSolids(1);	// mini render
 
-  // we put the normal mode back
+  // Balance both stacks and restore the matrix mode.
+  glMatrixMode(GL_MODELVIEW);
+  glPopMatrix();
   glMatrixMode(GL_PROJECTION);
   glPopMatrix();
+  glMatrixMode(previous_matrix_mode);
 
   // scan the selection buffer
   GLint hits = glRenderMode(GL_RENDER);
@@ -829,15 +846,16 @@ Object** Render::getDrawedObjects(int *nbhit)
     usercount = 1;
   }
 
-  Object** selectlist = new Object*[hits - usercount];
+  Object** selectlist = new Object*[hits - usercount + 1];
+  int nsel = 0;
 
   for (int i=0; i < hits; i++) {
     if (hitlist[i]) {
-      selectlist[i] = Object::byNum(hitlist[i][3]);
+      selectlist[nsel++] = Object::byNum(hitlist[i][3]);
     }
   }
-  if (hitlist) delete[] hitlist;
-  *nbhit = hits - usercount;
+  delete[] hitlist;
+  *nbhit = nsel;
 
   return selectlist;
 }

@@ -57,6 +57,8 @@ public:
     static int count;
     int no;
     bool push_attrib;
+    int matrix_mode;
+    double modelview_matrix[16], projection_matrix[16], texture_matrix[16];
     UHardwinImpl* hardwin;
   };
   

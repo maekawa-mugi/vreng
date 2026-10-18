@@ -214,7 +214,7 @@ void Render::showMap()
 
   ::g.gui.scene()->getScene(x, y, w, h);
   
-  glScissor((w/3)*2, (h/3)*2, w/3, h/3);  // top-right corner
+  glScissor(x + (w/3)*2, y + (h/3)*2, w/3, h/3);  // top-right corner
   glEnable(GL_SCISSOR_TEST);
  
   ::g.gui.scene()->setScene((w/3)*2, (h/3)*2, w/3, h/3);
@@ -237,8 +237,8 @@ void Render::showMap()
   minirender();
 
   // reset initial state
-  glDisable(GL_SCISSOR_TEST);
-  ::g.gui.scene()->setScene(x, y, w, h);
+  glScissor(x, y, w, h);
+  ::g.gui.scene()->setScene(0, 0, w, h);
 }
 
 /** Displays the satellite on the bottom-left corner of the canvas */
@@ -270,8 +270,8 @@ void Render::showSat()
   minirender();
 
   // reset initial state
-  glDisable(GL_SCISSOR_TEST);
-  ::g.gui.scene()->setScene(x, y, w, h);
+  glScissor(x, y, w, h);
+  ::g.gui.scene()->setScene(0, 0, w, h);
 }
 
 void Render::showView()
@@ -285,7 +285,7 @@ void Render::showView()
   X = w/4; Y = h/4; W = w/4; H = h/4;
 
   glEnable(GL_SCISSOR_TEST);
-  glScissor(X, Y, W, H);
+  glScissor(x + X, y + Y, W, H);
   //GLint s[4];
   //glGetIntegerv(GL_SCISSOR_BOX, s);
   //echo("vp: %d %d %d %d, %d %d %d %d, %d %d %d %d",x,y,w,h,X,Y,W,H,s[0],s[1],s[2],s[3]);
@@ -308,8 +308,8 @@ void Render::showView()
   //dax minirender();	// segfault
 
   // reset initial state
-  glDisable(GL_SCISSOR_TEST);
-  ::g.gui.scene()->setScene(x, y, w, h);
+  glScissor(x, y, w, h);
+  ::g.gui.scene()->setScene(0, 0, w, h);
 }
 
 /** Resets view */

@@ -300,6 +300,18 @@ FTFont* UHardFont::loadFTGLFont(UDisp* nd, const UFontDesc& fd)
     else  fnames = ff->defs.fty_regular;
   }
   
+#if LINUX
+  if (fd.styles & UFont::ITALIC) {
+    if (fd.styles & UFont::BOLD)
+      fnames.append(",/usr/share/fonts/truetype/dejavu/DejaVuSans-BoldOblique.ttf");
+    else
+      fnames.append(",/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf");
+  }
+  else if (fd.styles & UFont::BOLD)
+    fnames.append(",/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf");
+  else
+    fnames.append(",/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf");
+#endif
   UStr fname;
   while ((getNext(fname, fnames))) {
     FTFont* f = (FTFont*)new FTGLTextureFont(fname.c_str());

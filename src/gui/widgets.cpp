@@ -459,7 +459,11 @@ Object* Widgets::pointedObject(int x, int y, ObjInfo *objinfo, int z)
   //
   // Interaction GUI <--> 3D
   //
-  uint16_t objnum = ::g.render.bufferSelection(x, y, z);	// get object's num from Z-buffer
+  uint16_t objnum;
+  {
+    GLSection gls(&scene);
+    objnum = ::g.render.bufferSelection(x, y, z);
+  }	// get object's num from Z-buffer
   //echo("pointed: clic=%d %d %d objnum=%d", x, y, z, objnum);
   if (objnum == 0) {
     return NULL;

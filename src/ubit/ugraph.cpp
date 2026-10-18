@@ -195,7 +195,13 @@ void UGraph::Glpaint::begin(UView* v, bool _push_attrib)
     return;
   }
   
-  if (push_attrib) glPushAttrib(GL_ALL_ATTRIB_BITS);
+  if (push_attrib) {
+    glGetIntegerv(GL_MATRIX_MODE, &matrix_mode);
+    glGetDoublev(GL_MODELVIEW_MATRIX, modelview_matrix);
+    glGetDoublev(GL_PROJECTION_MATRIX, projection_matrix);
+    glGetDoublev(GL_TEXTURE_MATRIX, texture_matrix);
+    glPushAttrib(GL_ALL_ATTRIB_BITS);
+  }
   
   if (hardwin->getWinType() != UWinImpl::SUBWIN) {
     glViewport(int(v->x), int(winview->height - v->height - v->y), 
@@ -213,16 +219,25 @@ void UGraph::Glpaint::end() {
   if (!hardwin) return;  
   //cerr << "< GLSection " << no << " : " <<hardwin <<endl;
   
-  if (push_attrib) glPopAttrib();
-  
-  // reset to normal GUI rendering 
-  UGraph::setViewportOrtho(hardwin);
-  
-  //UDimension size = hardwin->getSize();
-  glEnable(GL_CLIP_PLANE0);
-  glEnable(GL_CLIP_PLANE1);
-  glEnable(GL_CLIP_PLANE2);
-  glEnable(GL_CLIP_PLANE3);
+  if (push_attrib) {
+    // glPushAttrib does not save matrix contents. Restore the exact GUI
+    // transforms and clip state, including during a partial resize repaint.
+    glMatrixMode(GL_MODELVIEW);
+    glLoadMatrixd(modelview_matrix);
+    glMatrixMode(GL_PROJECTION);
+    glLoadMatrixd(projection_matrix);
+    glMatrixMode(GL_TEXTURE);
+    glLoadMatrixd(texture_matrix);
+    glPopAttrib();
+    glMatrixMode(matrix_mode);
+  }
+  else {
+    UGraph::setViewportOrtho(hardwin);
+    glEnable(GL_CLIP_PLANE0);
+    glEnable(GL_CLIP_PLANE1);
+    glEnable(GL_CLIP_PLANE2);
+    glEnable(GL_CLIP_PLANE3);
+  }
   
   hardwin = null;   // dont do it again if called
 }

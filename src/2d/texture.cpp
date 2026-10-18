@@ -54,6 +54,10 @@ void Texture::update()
 {
   lockMutex(tex_pmutex);
   //-------------- lock
+  GLint previous_texture, previous_alignment;
+  glGetIntegerv(GL_TEXTURE_BINDING_2D, &previous_texture);
+  glGetIntegerv(GL_UNPACK_ALIGNMENT, &previous_alignment);
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
   for (std::list<Texture*>::iterator it = textureList.begin(); it != textureList.end(); ++it) {
     if ((*it)->img) {
@@ -62,6 +66,10 @@ void Texture::update()
         continue;
       }
       glBindTexture(GL_TEXTURE_2D, (*it)->tex_id);
+      GLenum format = GL_RGB;
+      if ((*it)->img->bpp == Img::RGBA) format = GL_RGBA;
+      else if ((*it)->img->bpp == Img::BW) format = GL_LUMINANCE;
+      else if ((*it)->img->bpp == Img::LA) format = GL_LUMINANCE_ALPHA;
 
       if (! (*it)->img->wellsized()) {	// image must be resized
         Img *img1 = NULL;
@@ -69,14 +77,14 @@ void Texture::update()
           error("updateTextures: id=%d u=%s", (*it)->tex_id, (*it)->url);
           continue;
         }
-        glTexImage2D(GL_TEXTURE_2D, 0, 3, img1->width, img1->height, 0,
-                     GL_RGB, GL_UNSIGNED_BYTE, img1->pixmap);
+        glTexImage2D(GL_TEXTURE_2D, 0, format, img1->width, img1->height, 0,
+                     format, GL_UNSIGNED_BYTE, img1->pixmap);
         if (img1) delete img1;
       }
       else {				// image well sized
         if (! (*it)->img->nummipmaps) {	// no mipmap
-          glTexImage2D(GL_TEXTURE_2D, 0, 3, (*it)->img->width, (*it)->img->height, 0,
-                       GL_RGB, GL_UNSIGNED_BYTE, (*it)->img->pixmap);
+          glTexImage2D(GL_TEXTURE_2D, 0, format, (*it)->img->width, (*it)->img->height, 0,
+                       format, GL_UNSIGNED_BYTE, (*it)->img->pixmap);
         }
         else {				// have mipmap
           GLsizei mipw = (*it)->img->width;
@@ -106,6 +114,8 @@ void Texture::update()
       }
     }
   }
+  glBindTexture(GL_TEXTURE_2D, previous_texture);
+  glPixelStorei(GL_UNPACK_ALIGNMENT, previous_alignment);
   //-------------- unlock
   unlockMutex(tex_pmutex);
 }
